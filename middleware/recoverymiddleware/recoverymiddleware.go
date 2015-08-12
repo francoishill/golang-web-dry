@@ -6,9 +6,7 @@ package recoverymiddleware
 
 import (
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 
 	"github.com/unrolled/render"
 
@@ -17,8 +15,13 @@ import (
 
 var IndentJSON = false
 
+type RecoveredErrorDetails struct {
+	Error      string
+	StackTrace string
+}
+
 type Recovery struct {
-	Logger *log.Logger
+	WithRecoveredError func(errDetails *RecoveredErrorDetails)
 }
 type jsonPanicError struct {
 	Code  int    `json:",omitempty"` // the http response code
@@ -27,25 +30,15 @@ type jsonPanicError struct {
 	// From  string `json:",omitempty"` // the file and line number from which the error originated
 }
 
-func NewRecovery() *Recovery {
+func NewRecovery(withRecoveredError func(errDetails *RecoveredErrorDetails)) *Recovery {
 	return &Recovery{
-		Logger: log.New(os.Stdout, "[negroni-mod] ", 0),
+		WithRecoveredError: withRecoveredError,
 	}
 }
 
 func (rec *Recovery) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	defer func() {
 		if err := recover(); err != nil {
-			rw.WriteHeader(http.StatusInternalServerError)
-
-			stack := GetPrettyStackTrace()
-
-			rec.Logger.Printf("PANIC: %s\n%s", err, stack)
-
-			r := render.New(render.Options{
-				IndentJSON: IndentJSON,
-			})
-
 			// convert err to a string
 			var errMsg string
 			if e, ok := err.(error); ok {
@@ -53,8 +46,16 @@ func (rec *Recovery) ServeHTTP(rw http.ResponseWriter, r *http.Request, next htt
 			} else {
 				errMsg = fmt.Sprint(err)
 			}
+			stack := GetPrettyStackTrace()
+			if rec.WithRecoveredError != nil {
+				rec.WithRecoveredError(&RecoveredErrorDetails{errMsg, stack})
+			}
 
-			r.JSON(rw, 500, &jsonPanicError{500, "InternalError", errMsg})
+			rw.WriteHeader(http.StatusInternalServerError)
+			rend := render.New(render.Options{
+				IndentJSON: IndentJSON,
+			})
+			rend.JSON(rw, 500, &jsonPanicError{500, "InternalError", errMsg})
 		}
 	}()
 
