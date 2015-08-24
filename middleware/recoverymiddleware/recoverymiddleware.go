@@ -51,7 +51,6 @@ func (rec *Recovery) ServeHTTP(rw http.ResponseWriter, r *http.Request, next htt
 				rec.WithRecoveredError(&RecoveredErrorDetails{errMsg, stack})
 			}
 
-			rw.WriteHeader(http.StatusInternalServerError)
 			rend := render.New(render.Options{
 				IndentJSON: IndentJSON,
 			})
