@@ -22,3 +22,5 @@ _testmain.go
 *.exe
 *.test
 *.prof
+/zip/examples/fileclient/run.bat
+/zip/examples/fileserver/run.bat
