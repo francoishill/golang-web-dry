@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-func SaveZipEntryToDisk(destinationFolder string, fileEntry *zip.File) {
+func SaveZipEntryToDisk(logger SimpleLogger, destinationFolder string, fileEntry *zip.File) {
 	rc, err := fileEntry.Open()
 	CheckError(err)
 	defer rc.Close()

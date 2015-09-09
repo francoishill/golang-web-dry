@@ -3,12 +3,17 @@ package ziputils
 import (
 	"fmt"
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
+	"github.com/francoishill/golang-web-dry/osutils"
 	"io"
 	"net/http"
 	"os"
 )
 
-func UploadFileToHttpResponseWriter(writer http.ResponseWriter, filePath string) {
+func UploadFileToHttpResponseWriter(logger SimpleLogger, writer http.ResponseWriter, filePath string) {
+	if !osutils.FileExists(filePath) {
+		panic("File does not exist: " + filePath)
+	}
+
 	file, err := os.OpenFile(filePath, 0, 0600)
 	CheckError(err)
 

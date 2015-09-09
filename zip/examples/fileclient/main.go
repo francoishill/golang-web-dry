@@ -18,11 +18,16 @@ import (
 )
 
 type Logger interface {
+	Debug(msg string, args ...interface{})
 	Info(msg string, args ...interface{})
 	Error(msg string, args ...interface{})
 }
 
 type defaultLogger struct{}
+
+func (l *defaultLogger) Debug(msg string, args ...interface{}) {
+	log.Println("[D] " + fmt.Sprintf(msg, args...))
+}
 
 func (l *defaultLogger) Info(msg string, args ...interface{}) {
 	log.Println("[I] " + fmt.Sprintf(msg, args...))
@@ -98,7 +103,7 @@ func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath string) 
 
 	checkServerResponse(resp)
 
-	ziputils.SaveZipDirectoryReaderToFolder(resp.Body, localPath)
+	ziputils.SaveTarDirectoryReaderToFolder(a.logger, resp.Body, localPath)
 }
 
 func (a *appContext) uploadFile(serverUrl, localPath, remotePath string) {
@@ -131,7 +136,7 @@ func (a *appContext) uploadDirectory(serverUrl, localPath, remotePath string) {
 
 	log.Println("Now starting to upload directory ", "from path:", localPath)
 	checkResponseFunc := checkServerResponse
-	ziputils.UploadDirectoryToUrl(serverUrl+"?dir="+url.QueryEscape(remotePath), "application/octet-stream", localPath, checkResponseFunc)
+	ziputils.UploadDirectoryToUrl(a.logger, serverUrl+"?dir="+url.QueryEscape(remotePath), "application/octet-stream", localPath, checkResponseFunc)
 }
 
 func (a *appContext) deleteDirectory(serverUrl, remotePath string) {
@@ -189,7 +194,8 @@ func main() {
 		}
 	}()
 
-	context := &appContext{&defaultLogger{}}
+	logger := &defaultLogger{}
+	context := &appContext{logger}
 
 	app := cli.NewApp()
 	app.Name = "copyclient"

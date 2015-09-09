@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-func SaveZipDirectoryReaderToFolder(bodyReader io.Reader, saveFolderPath string) {
+func SaveZipDirectoryReaderToFolder(logger SimpleLogger, bodyReader io.Reader, saveFolderPath string) {
 	tempDir := filepath.Join(os.TempDir(), "ZipDirs")
 	err := os.MkdirAll(tempDir, 0600)
 	CheckError(err)
@@ -26,7 +26,7 @@ func SaveZipDirectoryReaderToFolder(bodyReader io.Reader, saveFolderPath string)
 	defer zipFile.Close()
 
 	for _, fileEntry := range zipFile.File {
-		SaveZipEntryToDisk(saveFolderPath, fileEntry)
+		SaveZipEntryToDisk(logger, saveFolderPath, fileEntry)
 	}
 
 	zipFile.Close()

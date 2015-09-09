@@ -1,13 +1,18 @@
 package ziputils
 
 import (
-	"archive/zip"
+	"archive/tar"
+	"github.com/francoishill/golang-web-dry/osutils"
 	"net/http"
 )
 
-func UploadDirectoryToHttpResponseWriter(writer http.ResponseWriter, directoryPath string) {
-	zipWriter := zip.NewWriter(writer)
-	defer zipWriter.Close()
+func UploadDirectoryToHttpResponseWriter(logger SimpleLogger, writer http.ResponseWriter, directoryPath string) {
+	if !osutils.DirectoryExists(directoryPath) {
+		panic("Directory does not exist: " + directoryPath)
+	}
 
-	addDirectoryToZipStream(zipWriter, directoryPath)
+	tarWriter := tar.NewWriter(writer)
+	defer tarWriter.Close()
+
+	addDirectoryToTarStream(tarWriter, directoryPath)
 }

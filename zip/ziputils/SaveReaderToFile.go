@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-func SaveReaderToFile(bodyReader io.Reader, saveFilePath string) {
+func SaveReaderToFile(logger SimpleLogger, bodyReader io.Reader, saveFilePath string) {
 	out, err := os.Create(saveFilePath)
 	CheckError(err)
 	defer out.Close()

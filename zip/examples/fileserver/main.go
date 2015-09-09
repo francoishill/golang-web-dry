@@ -12,11 +12,16 @@ import (
 )
 
 type Logger interface {
+	Debug(msg string, args ...interface{})
 	Info(msg string, args ...interface{})
 	Error(msg string, args ...interface{})
 }
 
 type defaultLogger struct{}
+
+func (l *defaultLogger) Debug(msg string, args ...interface{}) {
+	log.Println("[D] " + fmt.Sprintf(msg, args...))
+}
 
 func (l *defaultLogger) Info(msg string, args ...interface{}) {
 	log.Println("[I] " + fmt.Sprintf(msg, args...))
@@ -84,10 +89,10 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 
 		if isDir {
 			a.logger.Info("Receiving directory (zipped) %s", path)
-			ziputils.SaveZipDirectoryReaderToFolder(r.Body, path)
+			ziputils.SaveTarDirectoryReaderToFolder(a.logger, r.Body, path)
 		} else {
 			a.logger.Info("Receiving file to %s", path)
-			ziputils.SaveReaderToFile(r.Body, path)
+			ziputils.SaveReaderToFile(a.logger, r.Body, path)
 		}
 	} else if r.Method == "GET" {
 		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
@@ -99,10 +104,10 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 
 		if isDir {
 			a.logger.Info("Sending directory %s", path)
-			ziputils.UploadDirectoryToHttpResponseWriter(w, path)
+			ziputils.UploadDirectoryToHttpResponseWriter(a.logger, w, path)
 		} else {
 			a.logger.Info("Sending file %s", path)
-			ziputils.UploadFileToHttpResponseWriter(w, path)
+			ziputils.UploadFileToHttpResponseWriter(a.logger, w, path)
 		}
 	} else {
 		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
@@ -120,12 +125,14 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
 func MainAction(c *cli.Context) {
 	c2 := &cliExtendedContext{c}
 
 	port := c2.RequireGlobalString("port")
 
-	h := &appContext{&defaultLogger{}}
+	logger := &defaultLogger{}
+	h := &appContext{logger}
 
 	http.HandleFunc("/", h.handler)
 
