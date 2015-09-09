@@ -6,6 +6,7 @@ import (
 	"github.com/dustin/go-humanize"
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
 	"github.com/francoishill/golang-web-dry/zip/ziputils"
+	"io/ioutil"
 	"strings"
 
 	"io"
@@ -53,10 +54,22 @@ func (a *appContext) getFileSize(file *os.File) int64 {
 	return fi.Size()
 }
 
+func checkServerResponse(resp *http.Response) {
+	if resp.StatusCode != http.StatusOK {
+		b, e := ioutil.ReadAll(resp.Body)
+		if e != nil {
+			panic(fmt.Sprintf("The server returned status code %d but could not read response body. Error: %s", e.Error()))
+		}
+		panic(fmt.Sprintf("Server status code %d with response %s", resp.StatusCode, string(b)))
+	}
+}
+
 func (a *appContext) downloadFile(serverUrl, localPath, remotePath string) {
 	resp, err := http.Get(serverUrl + "?file=" + url.QueryEscape(remotePath))
 	CheckError(err)
 	defer resp.Body.Close()
+
+	checkServerResponse(resp)
 
 	out, err := os.Create(localPath)
 	CheckError(err)
@@ -72,9 +85,11 @@ func (a *appContext) downloadFile(serverUrl, localPath, remotePath string) {
 }
 
 func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath string) {
-	resp, err := http.Get(serverUrl + "?zipdir=" + url.QueryEscape(remotePath))
+	resp, err := http.Get(serverUrl + "?dir=" + url.QueryEscape(remotePath))
 	CheckError(err)
 	defer resp.Body.Close()
+
+	checkServerResponse(resp)
 
 	ziputils.SaveZipDirectoryReaderToFolder(resp.Body, localPath)
 }
@@ -86,17 +101,51 @@ func (a *appContext) uploadFile(serverUrl, localPath, remotePath string) {
 	log.Println("Now starting to upload file of size", humanize.IBytes(uint64(a.getFileSize(file))), "from path:", localPath)
 	startTime := time.Now()
 
-	_, err = http.Post(serverUrl+"?file="+url.QueryEscape(remotePath), "application/octet-stream", file)
+	resp, err := http.Post(serverUrl+"?file="+url.QueryEscape(remotePath), "application/octet-stream", file)
 	CheckError(err)
+
+	checkServerResponse(resp)
 
 	duration := time.Now().Sub(startTime)
 	log.Println("Duration:", duration)
 }
+
+func (a *appContext) deleteFile(serverUrl, remotePath string) {
+	startTime := time.Now()
+
+	req, err := http.NewRequest("DELETE", serverUrl+"?file="+url.QueryEscape(remotePath), nil)
+	CheckError(err)
+
+	resp, err := http.DefaultClient.Do(req)
+	CheckError(err)
+
+	checkServerResponse(resp)
+
+	duration := time.Now().Sub(startTime)
+	log.Println("Duration:", duration)
+}
+
 func (a *appContext) uploadDirectory(serverUrl, localPath, remotePath string) {
 	log.Println("Now starting to upload directory ", "from path:", localPath)
 	startTime := time.Now()
 
-	ziputils.UploadDirectoryToUrl(serverUrl+"?zipdir="+url.QueryEscape(remotePath), "application/octet-stream", localPath)
+	checkResponseFunc := checkServerResponse
+	ziputils.UploadDirectoryToUrl(serverUrl+"?dir="+url.QueryEscape(remotePath), "application/octet-stream", localPath, checkResponseFunc)
+
+	duration := time.Now().Sub(startTime)
+	log.Println("Duration:", duration)
+}
+
+func (a *appContext) deleteDirectory(serverUrl, remotePath string) {
+	startTime := time.Now()
+
+	req, err := http.NewRequest("DELETE", serverUrl+"?dir="+url.QueryEscape(remotePath), nil)
+	CheckError(err)
+
+	resp, err := http.DefaultClient.Do(req)
+	CheckError(err)
+
+	checkServerResponse(resp)
 
 	duration := time.Now().Sub(startTime)
 	log.Println("Duration:", duration)
@@ -108,21 +157,30 @@ func (a *appContext) MainAction(c *cli.Context) {
 	mode := c2.RequireGlobalString("mode")
 
 	serverUrl := c2.RequireGlobalString("serverurl")
-	localPath := c2.RequireGlobalString("localpath")
 	remotePath := c2.RequireGlobalString("remotepath")
 
 	switch mode {
 	case "DOWNLOADFILE":
+		localPath := c2.RequireGlobalString("localpath")
 		a.downloadFile(serverUrl, localPath, remotePath)
 		break
 	case "DOWNLOADFOLDER":
+		localPath := c2.RequireGlobalString("localpath")
 		a.downloadDirectory(serverUrl, localPath, remotePath)
 		break
 	case "UPLOADFILE":
+		localPath := c2.RequireGlobalString("localpath")
 		a.uploadFile(serverUrl, localPath, remotePath)
 		break
 	case "UPLOADFOLDER":
+		localPath := c2.RequireGlobalString("localpath")
 		a.uploadDirectory(serverUrl, localPath, remotePath)
+		break
+	case "DELETEFILE":
+		a.deleteFile(serverUrl, remotePath)
+		break
+	case "DELETEFOLDER":
+		a.deleteDirectory(serverUrl, remotePath)
 		break
 	default:
 		panic("Unknown mode '" + mode + "'")
@@ -130,6 +188,12 @@ func (a *appContext) MainAction(c *cli.Context) {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Fatal(fmt.Sprintf("ERROR: %+v", r))
+		}
+	}()
+
 	context := &appContext{&defaultLogger{}}
 
 	app := cli.NewApp()

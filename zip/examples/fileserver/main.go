@@ -42,56 +42,81 @@ type appContext struct {
 	logger Logger
 }
 
-func (h *appContext) recoveryFunc(req *http.Request, errorMessageSinglePlaceholder string) {
+func (a *appContext) recoveryFunc(w http.ResponseWriter, req *http.Request, errorMessageSinglePlaceholder string) {
 	if r := recover(); r != nil {
-		h.logger.Error(errorMessageSinglePlaceholder, r)
+		a.logger.Error(errorMessageSinglePlaceholder, r)
+		http.Error(w, fmt.Sprintf("Internal server error: %+v", r), 500)
 		req.Body.Close()
 	}
 }
 
-func (h *appContext) handler(w http.ResponseWriter, r *http.Request) {
+func (a *appContext) getFileOrFolderFromRequest(r *http.Request) (path string, isDir bool) {
+	err := r.ParseForm()
+	CheckError(err)
+
+	saveFilePath := r.FormValue("file")
+	saveDirPath := r.FormValue("dir")
+	if saveFilePath == "" && saveDirPath == "" {
+		panic("Cannot find 'file' or 'dir' query parameters...")
+	} else if saveFilePath != "" && saveDirPath != "" {
+		panic("Cannot specify both 'file' or 'dir' query parameters...")
+	}
+
+	if saveFilePath != "" {
+		path = saveFilePath
+		isDir = false
+		return
+	} else {
+		path = saveDirPath
+		isDir = true
+		return
+	}
+}
+
+func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
-		defer h.recoveryFunc(r, "ERROR in handler: %+v")
+		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
 
 		err := r.ParseForm()
 		CheckError(err)
 
-		saveFilePath := r.FormValue("file")
-		saveZipDirPath := r.FormValue("zipdir")
-		if saveFilePath == "" && saveZipDirPath == "" {
-			panic("Cannot find 'file' or 'zipdir' query parameters...")
-		} else if saveFilePath != "" && saveZipDirPath != "" {
-			panic("Cannot specify both 'file' or 'zipdir' query parameters...")
-		}
+		path, isDir := a.getFileOrFolderFromRequest(r)
 
-		if saveFilePath != "" {
-			//Receiving a file
-			h.logger.Info("Receiving file to %s", saveFilePath)
-			ziputils.SaveReaderToFile(r.Body, saveFilePath)
-		} else if saveZipDirPath != "" {
-			h.logger.Info("Receiving directory (zipped) %s", saveZipDirPath)
-			ziputils.SaveZipDirectoryReaderToFolder(r.Body, saveZipDirPath)
+		if isDir {
+			a.logger.Info("Receiving directory (zipped) %s", path)
+			ziputils.SaveZipDirectoryReaderToFolder(r.Body, path)
+		} else {
+			a.logger.Info("Receiving file to %s", path)
+			ziputils.SaveReaderToFile(r.Body, path)
+		}
+	} else if r.Method == "GET" {
+		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
+
+		err := r.ParseForm()
+		CheckError(err)
+
+		path, isDir := a.getFileOrFolderFromRequest(r)
+
+		if isDir {
+			a.logger.Info("Deleting directory %s", path)
+			ziputils.UploadDirectoryToHttpResponseWriter(w, path)
+		} else {
+			a.logger.Info("Sending file %s", path)
+			ziputils.UploadFileToHttpResponseWriter(w, path)
 		}
 	} else {
-		defer h.recoveryFunc(r, "ERROR in handler: %+v")
+		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
 
-		err := r.ParseForm()
-		CheckError(err)
+		path, isDir := a.getFileOrFolderFromRequest(r)
 
-		downloadFilePath := r.FormValue("file")
-		downloadZipDirPath := r.FormValue("zipdir")
-		if downloadFilePath == "" && downloadZipDirPath == "" {
-			panic("Cannot find 'file' or 'zipdir' query parameters...")
-		} else if downloadFilePath != "" && downloadZipDirPath != "" {
-			panic("Cannot specify both 'file' or 'zipdir' query parameters...")
-		}
-
-		if downloadFilePath != "" {
-			h.logger.Info("Sending file %s", downloadFilePath)
-			ziputils.UploadFileToHttpResponseWriter(w, downloadFilePath)
-		} else if downloadZipDirPath != "" {
-			h.logger.Info("Sending directory %s", downloadZipDirPath)
-			ziputils.UploadDirectoryToHttpResponseWriter(w, downloadZipDirPath)
+		if isDir {
+			a.logger.Info("Deleting directory %s", path)
+			err := os.RemoveAll(path)
+			CheckError(err)
+		} else {
+			a.logger.Info("Deleting file %s", path)
+			err := os.Remove(path)
+			CheckError(err)
 		}
 	}
 }

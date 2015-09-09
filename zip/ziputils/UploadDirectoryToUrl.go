@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-func UploadDirectoryToUrl(url, bodyType, directoryPath string) {
+func UploadDirectoryToUrl(url, bodyType, directoryPath string, checkResponse func(resp *http.Response)) {
 	pipeReader, pipeWriter := io.Pipe()
 	zipWriter := zip.NewWriter(pipeWriter)
 
@@ -26,6 +26,10 @@ func UploadDirectoryToUrl(url, bodyType, directoryPath string) {
 	resp, err := http.Post(url, bodyType, pipeReader)
 	CheckError(err)
 	resp.Body.Close()
+
+	if checkResponse != nil {
+		checkResponse(resp)
+	}
 
 	wg.Wait()
 }
