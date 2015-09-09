@@ -98,7 +98,7 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 		path, isDir := a.getFileOrFolderFromRequest(r)
 
 		if isDir {
-			a.logger.Info("Deleting directory %s", path)
+			a.logger.Info("Sending directory %s", path)
 			ziputils.UploadDirectoryToHttpResponseWriter(w, path)
 		} else {
 			a.logger.Info("Sending file %s", path)
@@ -129,7 +129,7 @@ func MainAction(c *cli.Context) {
 
 	http.HandleFunc("/", h.handler)
 
-	log.Println("Now serving on", port)
+	log.Println(fmt.Sprintf("Now serving FileServer on port %s (process id is %d)", port, os.Getpid()))
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 

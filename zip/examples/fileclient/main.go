@@ -44,6 +44,15 @@ func (c *cliExtendedContext) RequireGlobalString(flagName string) string {
 	return val
 }
 
+type timer struct {
+	startTime time.Time
+}
+
+func (t *timer) printDuration() {
+	duration := time.Now().Sub(t.startTime)
+	log.Println("Duration:", duration)
+}
+
 type appContext struct {
 	logger Logger
 }
@@ -76,15 +85,13 @@ func (a *appContext) downloadFile(serverUrl, localPath, remotePath string) {
 	defer out.Close()
 
 	log.Println("Now starting to download file of size", humanize.IBytes(uint64(resp.ContentLength)), "to path:", localPath)
-	startTime := time.Now()
 	_, err = io.Copy(out, resp.Body)
 	CheckError(err)
-
-	duration := time.Now().Sub(startTime)
-	log.Println("Duration:", duration)
 }
 
 func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath string) {
+	defer (&timer{time.Now()}).printDuration()
+
 	resp, err := http.Get(serverUrl + "?dir=" + url.QueryEscape(remotePath))
 	CheckError(err)
 	defer resp.Body.Close()
@@ -95,23 +102,20 @@ func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath string) 
 }
 
 func (a *appContext) uploadFile(serverUrl, localPath, remotePath string) {
+	defer (&timer{time.Now()}).printDuration()
+
 	file, err := os.OpenFile(localPath, 0, 0600)
 	CheckError(err)
 
 	log.Println("Now starting to upload file of size", humanize.IBytes(uint64(a.getFileSize(file))), "from path:", localPath)
-	startTime := time.Now()
-
 	resp, err := http.Post(serverUrl+"?file="+url.QueryEscape(remotePath), "application/octet-stream", file)
 	CheckError(err)
 
 	checkServerResponse(resp)
-
-	duration := time.Now().Sub(startTime)
-	log.Println("Duration:", duration)
 }
 
 func (a *appContext) deleteFile(serverUrl, remotePath string) {
-	startTime := time.Now()
+	defer (&timer{time.Now()}).printDuration()
 
 	req, err := http.NewRequest("DELETE", serverUrl+"?file="+url.QueryEscape(remotePath), nil)
 	CheckError(err)
@@ -120,24 +124,18 @@ func (a *appContext) deleteFile(serverUrl, remotePath string) {
 	CheckError(err)
 
 	checkServerResponse(resp)
-
-	duration := time.Now().Sub(startTime)
-	log.Println("Duration:", duration)
 }
 
 func (a *appContext) uploadDirectory(serverUrl, localPath, remotePath string) {
-	log.Println("Now starting to upload directory ", "from path:", localPath)
-	startTime := time.Now()
+	defer (&timer{time.Now()}).printDuration()
 
+	log.Println("Now starting to upload directory ", "from path:", localPath)
 	checkResponseFunc := checkServerResponse
 	ziputils.UploadDirectoryToUrl(serverUrl+"?dir="+url.QueryEscape(remotePath), "application/octet-stream", localPath, checkResponseFunc)
-
-	duration := time.Now().Sub(startTime)
-	log.Println("Duration:", duration)
 }
 
 func (a *appContext) deleteDirectory(serverUrl, remotePath string) {
-	startTime := time.Now()
+	defer (&timer{time.Now()}).printDuration()
 
 	req, err := http.NewRequest("DELETE", serverUrl+"?dir="+url.QueryEscape(remotePath), nil)
 	CheckError(err)
@@ -146,9 +144,6 @@ func (a *appContext) deleteDirectory(serverUrl, remotePath string) {
 	CheckError(err)
 
 	checkServerResponse(resp)
-
-	duration := time.Now().Sub(startTime)
-	log.Println("Duration:", duration)
 }
 
 func (a *appContext) MainAction(c *cli.Context) {
