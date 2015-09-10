@@ -23,18 +23,22 @@ type Logger interface {
 	Error(msg string, args ...interface{})
 }
 
-type defaultLogger struct{}
+type defaultLogger struct {
+	d *log.Logger
+	i *log.Logger
+	e *log.Logger
+}
 
 func (l *defaultLogger) Debug(msg string, args ...interface{}) {
-	log.Println("[D] " + fmt.Sprintf(msg, args...))
+	l.d.Println(fmt.Sprintf(msg, args...))
 }
 
 func (l *defaultLogger) Info(msg string, args ...interface{}) {
-	log.Println("[I] " + fmt.Sprintf(msg, args...))
+	l.i.Println(fmt.Sprintf(msg, args...))
 }
 
 func (l *defaultLogger) Error(msg string, args ...interface{}) {
-	log.Println("[E] " + fmt.Sprintf(msg, args...))
+	l.e.Println(fmt.Sprintf(msg, args...))
 }
 
 type cliExtendedContext struct {
@@ -50,12 +54,13 @@ func (c *cliExtendedContext) RequireGlobalString(flagName string) string {
 }
 
 type timer struct {
+	logger    Logger
 	startTime time.Time
 }
 
 func (t *timer) printDuration() {
 	duration := time.Now().Sub(t.startTime)
-	log.Println("Duration:", duration)
+	t.logger.Debug("Duration %s", duration.String())
 }
 
 type appContext struct {
@@ -89,15 +94,20 @@ func (a *appContext) downloadFile(serverUrl, localPath, remotePath string) {
 	CheckError(err)
 	defer out.Close()
 
-	log.Println("Now starting to download file of size", humanize.IBytes(uint64(resp.ContentLength)), "to path:", localPath)
+	a.logger.Debug("Now starting to download remote file '%s' of size %s to path '%s'", remotePath, humanize.IBytes(uint64(resp.ContentLength)), localPath)
 	_, err = io.Copy(out, resp.Body)
 	CheckError(err)
 }
 
-func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath string) {
-	defer (&timer{time.Now()}).printDuration()
+func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern string) {
+	defer (&timer{a.logger, time.Now()}).printDuration()
 
-	resp, err := http.Get(serverUrl + "?dir=" + url.QueryEscape(remotePath))
+	var fileFilterQueryPart = ""
+	if dirFileFilterPattern != "" {
+		fileFilterQueryPart = "&filefilter=" + url.QueryEscape(dirFileFilterPattern)
+	}
+
+	resp, err := http.Get(serverUrl + "?dir=" + url.QueryEscape(remotePath) + fileFilterQueryPart)
 	CheckError(err)
 	defer resp.Body.Close()
 
@@ -107,12 +117,12 @@ func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath string) 
 }
 
 func (a *appContext) uploadFile(serverUrl, localPath, remotePath string) {
-	defer (&timer{time.Now()}).printDuration()
+	defer (&timer{a.logger, time.Now()}).printDuration()
 
 	file, err := os.OpenFile(localPath, 0, 0600)
 	CheckError(err)
 
-	log.Println("Now starting to upload file of size", humanize.IBytes(uint64(a.getFileSize(file))), "from path:", localPath)
+	a.logger.Debug("Now starting to upload local file '%s' of size %s to remote path '%s'", localPath, humanize.IBytes(uint64(a.getFileSize(file))), remotePath)
 	resp, err := http.Post(serverUrl+"?file="+url.QueryEscape(remotePath), "application/octet-stream", file)
 	CheckError(err)
 
@@ -120,7 +130,7 @@ func (a *appContext) uploadFile(serverUrl, localPath, remotePath string) {
 }
 
 func (a *appContext) deleteFile(serverUrl, remotePath string) {
-	defer (&timer{time.Now()}).printDuration()
+	defer (&timer{a.logger, time.Now()}).printDuration()
 
 	req, err := http.NewRequest("DELETE", serverUrl+"?file="+url.QueryEscape(remotePath), nil)
 	CheckError(err)
@@ -131,18 +141,24 @@ func (a *appContext) deleteFile(serverUrl, remotePath string) {
 	checkServerResponse(resp)
 }
 
-func (a *appContext) uploadDirectory(serverUrl, localPath, remotePath string) {
-	defer (&timer{time.Now()}).printDuration()
+func (a *appContext) uploadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern string) {
+	defer (&timer{a.logger, time.Now()}).printDuration()
 
-	log.Println("Now starting to upload directory ", "from path:", localPath)
+	a.logger.Debug("Now starting to upload local directory '%s' to remote '%s", localPath, remotePath)
 	checkResponseFunc := checkServerResponse
-	ziputils.UploadDirectoryToUrl(a.logger, serverUrl+"?dir="+url.QueryEscape(remotePath), "application/octet-stream", localPath, checkResponseFunc)
+	walkContext := ziputils.NewDirWalkContext(dirFileFilterPattern)
+	ziputils.UploadDirectoryToUrl(a.logger, serverUrl+"?dir="+url.QueryEscape(remotePath), "application/octet-stream", localPath, walkContext, checkResponseFunc)
 }
 
-func (a *appContext) deleteDirectory(serverUrl, remotePath string) {
-	defer (&timer{time.Now()}).printDuration()
+func (a *appContext) deleteDirectory(serverUrl, remotePath, dirFileFilterPattern string) {
+	defer (&timer{a.logger, time.Now()}).printDuration()
 
-	req, err := http.NewRequest("DELETE", serverUrl+"?dir="+url.QueryEscape(remotePath), nil)
+	var fileFilterQueryPart = ""
+	if dirFileFilterPattern != "" {
+		fileFilterQueryPart = "&filefilter=" + url.QueryEscape(dirFileFilterPattern)
+	}
+
+	req, err := http.NewRequest("DELETE", serverUrl+"?dir="+url.QueryEscape(remotePath)+fileFilterQueryPart, nil)
 	CheckError(err)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -166,7 +182,8 @@ func (a *appContext) MainAction(c *cli.Context) {
 		break
 	case "DOWNLOADFOLDER":
 		localPath := c2.RequireGlobalString("localpath")
-		a.downloadDirectory(serverUrl, localPath, remotePath)
+		dirFileFilterPattern := c.GlobalString("filefilter") //Not required
+		a.downloadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern)
 		break
 	case "UPLOADFILE":
 		localPath := c2.RequireGlobalString("localpath")
@@ -174,13 +191,15 @@ func (a *appContext) MainAction(c *cli.Context) {
 		break
 	case "UPLOADFOLDER":
 		localPath := c2.RequireGlobalString("localpath")
-		a.uploadDirectory(serverUrl, localPath, remotePath)
+		dirFileFilterPattern := c.GlobalString("filefilter") //Not required
+		a.uploadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern)
 		break
 	case "DELETEFILE":
 		a.deleteFile(serverUrl, remotePath)
 		break
 	case "DELETEFOLDER":
-		a.deleteDirectory(serverUrl, remotePath)
+		dirFileFilterPattern := c.GlobalString("filefilter") //Not required
+		a.deleteDirectory(serverUrl, remotePath, dirFileFilterPattern)
 		break
 	default:
 		panic("Unknown mode '" + mode + "'")
@@ -194,7 +213,11 @@ func main() {
 		}
 	}()
 
-	logger := &defaultLogger{}
+	logger := &defaultLogger{
+		d: log.New(os.Stdout, "[D] ", log.Ldate|log.Ltime|log.Lshortfile),
+		i: log.New(os.Stdout, "[I] ", log.Ldate|log.Ltime|log.Lshortfile),
+		e: log.New(os.Stderr, "[E] ", log.Ldate|log.Ltime|log.Lshortfile),
+	}
 	context := &appContext{logger}
 
 	app := cli.NewApp()
@@ -221,6 +244,11 @@ func main() {
 			Name:  "remotepath,r",
 			Value: "",
 			Usage: "The full absolute REMOTE path (file/folder)",
+		},
+		cli.StringFlag{
+			Name:  "filefilter,f",
+			Value: "",
+			Usage: "The golang filepath filter pattern (for file base name), see http://golang.org/pkg/path/filepath/#Match",
 		},
 	}
 	app.Run(os.Args)

@@ -8,13 +8,17 @@ import (
 	"path/filepath"
 )
 
-func addDirectoryToZipStream(w *zip.Writer, dir string) {
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+func addDirectoryToZipStream(w *zip.Writer, dir string, walkContext *dirWalkContext) {
+	e := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
 		if info.IsDir() {
+			return nil
+		}
+
+		if !walkContext.isMatch(info) {
 			return nil
 		}
 
@@ -38,4 +42,6 @@ func addDirectoryToZipStream(w *zip.Writer, dir string) {
 
 		return nil
 	})
+
+	CheckError(e)
 }

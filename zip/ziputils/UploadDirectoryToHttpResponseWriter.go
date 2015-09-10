@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func UploadDirectoryToHttpResponseWriter(logger SimpleLogger, writer http.ResponseWriter, directoryPath string) {
+func UploadDirectoryToHttpResponseWriter(logger SimpleLogger, writer http.ResponseWriter, directoryPath string, walkContext *dirWalkContext) {
 	if !osutils.DirectoryExists(directoryPath) {
 		panic("Directory does not exist: " + directoryPath)
 	}
@@ -14,5 +14,5 @@ func UploadDirectoryToHttpResponseWriter(logger SimpleLogger, writer http.Respon
 	tarWriter := tar.NewWriter(writer)
 	defer tarWriter.Close()
 
-	addDirectoryToTarStream(tarWriter, directoryPath)
+	addDirectoryToTarStream(tarWriter, directoryPath, walkContext)
 }

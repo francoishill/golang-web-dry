@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 )
 
-func addDirectoryToTarStream(w *tar.Writer, dir string) {
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+func addDirectoryToTarStream(w *tar.Writer, dir string, walkContext *dirWalkContext) {
+	e := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if info.IsDir() {
+		if !walkContext.isMatch(info) {
 			return nil
 		}
 
@@ -24,20 +24,24 @@ func addDirectoryToTarStream(w *tar.Writer, dir string) {
 		}
 
 		relPath = relPath[1:]
-		file, err := os.Open(path)
-		CheckError(err)
-		defer file.Close()
 
-		hdr := &tar.Header{
-			Name: relPath,
-			Mode: 0600,
-			Size: getFileSize(file),
-		}
+		hdr, err := tar.FileInfoHeader(info, "")
+		CheckError(err)
+		hdr.Name = relPath
+
 		err = w.WriteHeader(hdr)
 		CheckError(err)
 
-		io.Copy(w, file)
+		if !info.IsDir() {
+			file, err := os.Open(path)
+			CheckError(err)
+			defer file.Close()
+
+			io.Copy(w, file)
+		}
 
 		return nil
 	})
+
+	CheckError(e)
 }

@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-func UploadDirectoryToUrl(logger SimpleLogger, url, bodyType, directoryPath string, checkResponse func(resp *http.Response)) {
+func UploadDirectoryToUrl(logger SimpleLogger, url, bodyType, directoryPath string, walkContext *dirWalkContext, checkResponse func(resp *http.Response)) {
 	if !osutils.DirectoryExists(directoryPath) {
 		panic("Directory does not exist: " + directoryPath)
 	}
@@ -21,7 +21,7 @@ func UploadDirectoryToUrl(logger SimpleLogger, url, bodyType, directoryPath stri
 	wg.Add(1)
 
 	go func() {
-		addDirectoryToTarStream(tarWriter, directoryPath)
+		addDirectoryToTarStream(tarWriter, directoryPath, walkContext)
 		tarWriter.Close()
 		pipeWriter.Close()
 

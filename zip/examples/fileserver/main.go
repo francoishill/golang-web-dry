@@ -78,6 +78,14 @@ func (a *appContext) getFileOrFolderFromRequest(r *http.Request) (path string, i
 	}
 }
 
+func (a *appContext) getDirFileFilterPatternFromRequest(r *http.Request) string {
+	err := r.ParseForm()
+	CheckError(err)
+
+	dirWalkFileFilter := r.FormValue("filefilter")
+	return dirWalkFileFilter
+}
+
 func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
@@ -104,7 +112,8 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 
 		if isDir {
 			a.logger.Info("Sending directory %s", path)
-			ziputils.UploadDirectoryToHttpResponseWriter(a.logger, w, path)
+			walkContext := ziputils.NewDirWalkContext(a.getDirFileFilterPatternFromRequest(r))
+			ziputils.UploadDirectoryToHttpResponseWriter(a.logger, w, path, walkContext)
 		} else {
 			a.logger.Info("Sending file %s", path)
 			ziputils.UploadFileToHttpResponseWriter(a.logger, w, path)
@@ -116,8 +125,8 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 
 		if isDir {
 			a.logger.Info("Deleting directory %s", path)
-			err := os.RemoveAll(path)
-			CheckError(err)
+			walkContext := ziputils.NewDirWalkContext(a.getDirFileFilterPatternFromRequest(r))
+			walkContext.DeleteDirectory(path)
 		} else {
 			a.logger.Info("Deleting file %s", path)
 			err := os.Remove(path)
