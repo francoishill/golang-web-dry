@@ -207,18 +207,18 @@ func (a *appContext) MainAction(c *cli.Context) {
 }
 
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Fatal(fmt.Sprintf("ERROR: %+v", r))
-		}
-	}()
-
 	logger := &defaultLogger{
 		d: log.New(os.Stdout, "[D] ", log.Ldate|log.Ltime|log.Lshortfile),
 		i: log.New(os.Stdout, "[I] ", log.Ldate|log.Ltime|log.Lshortfile),
 		e: log.New(os.Stderr, "[E] ", log.Ldate|log.Ltime|log.Lshortfile),
 	}
 	context := &appContext{logger}
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("%+v", r)
+		}
+	}()
 
 	app := cli.NewApp()
 	app.Name = "copyclient"
