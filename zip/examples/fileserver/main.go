@@ -109,7 +109,7 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 			a.logger.Info("Sending file %s", path)
 			ziputils.UploadFileToHttpResponseWriter(a.logger, w, path)
 		}
-	} else {
+	} else if r.Method == "DELETE" {
 		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
 
 		path, isDir := a.getFileOrFolderFromRequest(r)
@@ -123,6 +123,10 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 			err := os.Remove(path)
 			CheckError(err)
 		}
+	} else {
+		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
+
+		panic("Unsupported method " + r.Method)
 	}
 }
 
