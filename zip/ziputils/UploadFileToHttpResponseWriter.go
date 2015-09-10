@@ -1,10 +1,9 @@
 package ziputils
 
 import (
-	"fmt"
+	"archive/tar"
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
 	"github.com/francoishill/golang-web-dry/osutils"
-	"io"
 	"net/http"
 	"os"
 )
@@ -14,11 +13,17 @@ func UploadFileToHttpResponseWriter(logger SimpleLogger, writer http.ResponseWri
 		panic("File does not exist: " + filePath)
 	}
 
+	tarWriter := tar.NewWriter(writer)
+	defer tarWriter.Close()
+
 	file, err := os.OpenFile(filePath, 0, 0600)
 	CheckError(err)
+	defer file.Close()
 
-	writer.Header().Set("Content-Length", fmt.Sprintf("%d", getFileSize(file)))
-
-	_, err = io.Copy(writer, file)
+	info, err := file.Stat()
 	CheckError(err)
+
+	writeFileToTarWriter(tarWriter, info, filePath, "", true)
+
+	writeEndOfTarStreamHeader(tarWriter)
 }

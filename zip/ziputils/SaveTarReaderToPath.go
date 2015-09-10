@@ -8,9 +8,10 @@ import (
 	"path/filepath"
 )
 
-func SaveTarDirectoryReaderToFolder(logger SimpleLogger, bodyReader io.Reader, saveFolderPath string) {
+func SaveTarReaderToPath(logger SimpleLogger, bodyReader io.Reader, savePath string) {
 	tarReader := tar.NewReader(bodyReader)
 
+	foundEndOfTar := false
 	for {
 		hdr, err := tarReader.Next()
 		if err == io.EOF {
@@ -19,15 +20,24 @@ func SaveTarDirectoryReaderToFolder(logger SimpleLogger, bodyReader io.Reader, s
 		}
 		CheckError(err) //Check after checking for EOF
 
+		if hdr.Name == END_OF_TAR_FILENAME {
+			foundEndOfTar = true
+			continue
+		}
+
 		relativePath := hdr.Name
 
 		if hdr.FileInfo().IsDir() {
-			fullDestinationDirPath := filepath.Join(saveFolderPath, relativePath)
+			fullDestinationDirPath := filepath.Join(savePath, relativePath)
 			logger.Debug("(TAR) Creating directory %s", fullDestinationDirPath)
 			os.MkdirAll(fullDestinationDirPath, os.FileMode(hdr.Mode))
 			defer os.Chtimes(fullDestinationDirPath, hdr.AccessTime, hdr.ModTime)
 		} else {
-			fullDestinationFilePath := filepath.Join(saveFolderPath, relativePath)
+			fullDestinationFilePath := filepath.Join(savePath, relativePath)
+			if val, ok := hdr.Xattrs["SINGLE_FILE_ONLY"]; ok && val == "1" {
+				fullDestinationFilePath = savePath
+			}
+
 			os.MkdirAll(filepath.Dir(fullDestinationFilePath), os.FileMode(hdr.Mode))
 
 			logger.Debug("(TAR) Saving file %s", fullDestinationFilePath)
@@ -38,9 +48,10 @@ func SaveTarDirectoryReaderToFolder(logger SimpleLogger, bodyReader io.Reader, s
 
 			_, err = io.Copy(file, tarReader)
 			CheckError(err)
-
 		}
+	}
 
-		CheckError(err)
+	if !foundEndOfTar {
+		panic("TAR stream validation failed, something has gone wrong during the transfer.")
 	}
 }

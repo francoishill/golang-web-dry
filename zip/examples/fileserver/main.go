@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/codegangsta/cli"
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
+	"github.com/francoishill/golang-web-dry/errors/stacktraces/prettystacktrace"
 	"github.com/francoishill/golang-web-dry/zip/ziputils"
 	"log"
 	"net/http"
@@ -50,16 +51,24 @@ type appContext struct {
 func (a *appContext) recoveryFunc(w http.ResponseWriter, req *http.Request, errorMessageSinglePlaceholder string) {
 	if r := recover(); r != nil {
 		a.logger.Error(errorMessageSinglePlaceholder, r)
-		http.Error(w, fmt.Sprintf("Internal server error: %+v", r), 500)
+		a.logger.Error("Stack: %s", prettystacktrace.GetPrettyStackTrace())
+		http.Error(w, fmt.Sprintf("Internal server error: %+v", r), http.StatusInternalServerError)
 		req.Body.Close()
 	}
+}
+
+func (a *appContext) getPathFromRequest(r *http.Request) string {
+	err := r.ParseForm()
+	CheckError(err)
+
+	return r.FormValue("path")
 }
 
 func (a *appContext) getFileOrFolderFromRequest(r *http.Request) (path string, isDir bool) {
 	err := r.ParseForm()
 	CheckError(err)
 
-	saveFilePath := r.FormValue("file")
+	saveFilePath := r.FormValue("path")
 	saveDirPath := r.FormValue("dir")
 	if saveFilePath == "" && saveDirPath == "" {
 		panic("Cannot find 'file' or 'dir' query parameters...")
@@ -82,22 +91,27 @@ func (a *appContext) getDirFileFilterPatternFromRequest(r *http.Request) string 
 	err := r.ParseForm()
 	CheckError(err)
 
-	dirWalkFileFilter := r.FormValue("filefilter")
-	return dirWalkFileFilter
+	return r.FormValue("filefilter")
+}
+
+func (a *appContext) isDir(path string) bool {
+	p, err := os.Open(path)
+	CheckError(err)
+	defer p.Close()
+	info, err := p.Stat()
+	CheckError(err)
+	return info.IsDir()
 }
 
 func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
 
-		err := r.ParseForm()
-		CheckError(err)
-
 		path, isDir := a.getFileOrFolderFromRequest(r)
 
 		if isDir {
 			a.logger.Info("Receiving directory (zipped) %s", path)
-			ziputils.SaveTarDirectoryReaderToFolder(a.logger, r.Body, path)
+			ziputils.SaveTarReaderToPath(a.logger, r.Body, path)
 		} else {
 			a.logger.Info("Receiving file to %s", path)
 			ziputils.SaveReaderToFile(a.logger, r.Body, path)
@@ -105,12 +119,9 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 	} else if r.Method == "GET" {
 		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
 
-		err := r.ParseForm()
-		CheckError(err)
+		path := a.getPathFromRequest(r)
 
-		path, isDir := a.getFileOrFolderFromRequest(r)
-
-		if isDir {
+		if a.isDir(path) {
 			a.logger.Info("Sending directory %s", path)
 			walkContext := ziputils.NewDirWalkContext(a.getDirFileFilterPatternFromRequest(r))
 			ziputils.UploadDirectoryToHttpResponseWriter(a.logger, w, path, walkContext)
@@ -121,9 +132,9 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 	} else if r.Method == "DELETE" {
 		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
 
-		path, isDir := a.getFileOrFolderFromRequest(r)
+		path := a.getPathFromRequest(r)
 
-		if isDir {
+		if a.isDir(path) {
 			a.logger.Info("Deleting directory %s", path)
 			walkContext := ziputils.NewDirWalkContext(a.getDirFileFilterPatternFromRequest(r))
 			walkContext.DeleteDirectory(path)

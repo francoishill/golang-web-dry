@@ -7,13 +7,11 @@ import (
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
 	"github.com/francoishill/golang-web-dry/zip/ziputils"
 	"io/ioutil"
-	"strings"
-
-	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -83,23 +81,7 @@ func checkServerResponse(resp *http.Response) {
 	}
 }
 
-func (a *appContext) downloadFile(serverUrl, localPath, remotePath string) {
-	resp, err := http.Get(serverUrl + "?file=" + url.QueryEscape(remotePath))
-	CheckError(err)
-	defer resp.Body.Close()
-
-	checkServerResponse(resp)
-
-	out, err := os.Create(localPath)
-	CheckError(err)
-	defer out.Close()
-
-	a.logger.Debug("Now starting to download remote file '%s' of size %s to path '%s'", remotePath, humanize.IBytes(uint64(resp.ContentLength)), localPath)
-	_, err = io.Copy(out, resp.Body)
-	CheckError(err)
-}
-
-func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern string) {
+func (a *appContext) download(serverUrl, localPath, remotePath, dirFileFilterPattern string) {
 	defer (&timer{a.logger, time.Now()}).printDuration()
 
 	var fileFilterQueryPart = ""
@@ -107,13 +89,13 @@ func (a *appContext) downloadDirectory(serverUrl, localPath, remotePath, dirFile
 		fileFilterQueryPart = "&filefilter=" + url.QueryEscape(dirFileFilterPattern)
 	}
 
-	resp, err := http.Get(serverUrl + "?dir=" + url.QueryEscape(remotePath) + fileFilterQueryPart)
+	resp, err := http.Get(serverUrl + "?path=" + url.QueryEscape(remotePath) + fileFilterQueryPart)
 	CheckError(err)
 	defer resp.Body.Close()
 
 	checkServerResponse(resp)
 
-	ziputils.SaveTarDirectoryReaderToFolder(a.logger, resp.Body, localPath)
+	ziputils.SaveTarReaderToPath(a.logger, resp.Body, localPath)
 }
 
 func (a *appContext) uploadFile(serverUrl, localPath, remotePath string) {
@@ -129,18 +111,6 @@ func (a *appContext) uploadFile(serverUrl, localPath, remotePath string) {
 	checkServerResponse(resp)
 }
 
-func (a *appContext) deleteFile(serverUrl, remotePath string) {
-	defer (&timer{a.logger, time.Now()}).printDuration()
-
-	req, err := http.NewRequest("DELETE", serverUrl+"?file="+url.QueryEscape(remotePath), nil)
-	CheckError(err)
-
-	resp, err := http.DefaultClient.Do(req)
-	CheckError(err)
-
-	checkServerResponse(resp)
-}
-
 func (a *appContext) uploadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern string) {
 	defer (&timer{a.logger, time.Now()}).printDuration()
 
@@ -150,7 +120,24 @@ func (a *appContext) uploadDirectory(serverUrl, localPath, remotePath, dirFileFi
 	ziputils.UploadDirectoryToUrl(a.logger, serverUrl+"?dir="+url.QueryEscape(remotePath), "application/octet-stream", localPath, walkContext, checkResponseFunc)
 }
 
-func (a *appContext) deleteDirectory(serverUrl, remotePath, dirFileFilterPattern string) {
+func (a *appContext) isDir(path string) bool {
+	p, err := os.Open(path)
+	CheckError(err)
+	defer p.Close()
+	info, err := p.Stat()
+	CheckError(err)
+	return info.IsDir()
+}
+
+func (a *appContext) upload(serverUrl, localPath, remotePath, dirFileFilterPattern string) {
+	if a.isDir(localPath) {
+		a.uploadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern)
+	} else {
+		a.uploadFile(serverUrl, localPath, remotePath)
+	}
+}
+
+func (a *appContext) delete(serverUrl, remotePath, dirFileFilterPattern string) {
 	defer (&timer{a.logger, time.Now()}).printDuration()
 
 	var fileFilterQueryPart = ""
@@ -158,7 +145,7 @@ func (a *appContext) deleteDirectory(serverUrl, remotePath, dirFileFilterPattern
 		fileFilterQueryPart = "&filefilter=" + url.QueryEscape(dirFileFilterPattern)
 	}
 
-	req, err := http.NewRequest("DELETE", serverUrl+"?dir="+url.QueryEscape(remotePath)+fileFilterQueryPart, nil)
+	req, err := http.NewRequest("DELETE", serverUrl+"?path="+url.QueryEscape(remotePath)+fileFilterQueryPart, nil)
 	CheckError(err)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -176,30 +163,19 @@ func (a *appContext) MainAction(c *cli.Context) {
 	remotePath := c2.RequireGlobalString("remotepath")
 
 	switch mode {
-	case "DOWNLOADFILE":
-		localPath := c2.RequireGlobalString("localpath")
-		a.downloadFile(serverUrl, localPath, remotePath)
-		break
-	case "DOWNLOADFOLDER":
+	case "DOWNLOAD":
 		localPath := c2.RequireGlobalString("localpath")
 		dirFileFilterPattern := c.GlobalString("filefilter") //Not required
-		a.downloadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern)
+		a.download(serverUrl, localPath, remotePath, dirFileFilterPattern)
 		break
-	case "UPLOADFILE":
-		localPath := c2.RequireGlobalString("localpath")
-		a.uploadFile(serverUrl, localPath, remotePath)
-		break
-	case "UPLOADFOLDER":
+	case "UPLOAD":
 		localPath := c2.RequireGlobalString("localpath")
 		dirFileFilterPattern := c.GlobalString("filefilter") //Not required
-		a.uploadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern)
+		a.upload(serverUrl, localPath, remotePath, dirFileFilterPattern)
 		break
-	case "DELETEFILE":
-		a.deleteFile(serverUrl, remotePath)
-		break
-	case "DELETEFOLDER":
+	case "DELETE":
 		dirFileFilterPattern := c.GlobalString("filefilter") //Not required
-		a.deleteDirectory(serverUrl, remotePath, dirFileFilterPattern)
+		a.delete(serverUrl, remotePath, dirFileFilterPattern)
 		break
 	default:
 		panic("Unknown mode '" + mode + "'")
@@ -246,7 +222,7 @@ func main() {
 			Usage: "The full absolute REMOTE path (file/folder)",
 		},
 		cli.StringFlag{
-			Name:  "filefilter,f",
+			Name:  "filefilter,ff",
 			Value: "",
 			Usage: "The golang filepath filter pattern (for file base name), see http://golang.org/pkg/path/filepath/#Match",
 		},

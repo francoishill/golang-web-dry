@@ -21,7 +21,7 @@ func UploadDirectoryToUrl(logger SimpleLogger, url, bodyType, directoryPath stri
 	wg.Add(1)
 
 	go func() {
-		addDirectoryToTarStream(tarWriter, directoryPath, walkContext)
+		addDirectoryToTarStream(tarWriter, directoryPath, walkContext, true)
 		tarWriter.Close()
 		pipeWriter.Close()
 

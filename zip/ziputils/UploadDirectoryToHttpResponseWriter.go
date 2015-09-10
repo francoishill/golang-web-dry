@@ -14,5 +14,5 @@ func UploadDirectoryToHttpResponseWriter(logger SimpleLogger, writer http.Respon
 	tarWriter := tar.NewWriter(writer)
 	defer tarWriter.Close()
 
-	addDirectoryToTarStream(tarWriter, directoryPath, walkContext)
+	addDirectoryToTarStream(tarWriter, directoryPath, walkContext, true)
 }

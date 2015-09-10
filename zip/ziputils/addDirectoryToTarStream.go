@@ -3,12 +3,11 @@ package ziputils
 import (
 	"archive/tar"
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
-	"io"
 	"os"
 	"path/filepath"
 )
 
-func addDirectoryToTarStream(w *tar.Writer, dir string, walkContext *dirWalkContext) {
+func addDirectoryToTarStream(tarWriter *tar.Writer, dir string, walkContext *dirWalkContext, writeEndHeader bool) {
 	e := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -25,23 +24,14 @@ func addDirectoryToTarStream(w *tar.Writer, dir string, walkContext *dirWalkCont
 
 		relPath = relPath[1:]
 
-		hdr, err := tar.FileInfoHeader(info, "")
-		CheckError(err)
-		hdr.Name = relPath
-
-		err = w.WriteHeader(hdr)
-		CheckError(err)
-
-		if !info.IsDir() {
-			file, err := os.Open(path)
-			CheckError(err)
-			defer file.Close()
-
-			io.Copy(w, file)
-		}
+		writeFileToTarWriter(tarWriter, info, path, relPath, false)
 
 		return nil
 	})
 
 	CheckError(e)
+
+	if writeEndHeader {
+		writeEndOfTarStreamHeader(tarWriter)
+	}
 }
