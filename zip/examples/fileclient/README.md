@@ -1,6 +1,16 @@
 # Example using ziputils as a file client (communicating with the example server)
 
-# Windows example
+## Commands
+Commands are currently `UPLOADFOLDER`, `UPLOADFILE`, `DOWNLOADFILE`, `DOWNLOADFOLDER`, `DELETEFILE`, `DELETEFOLDER`.
+
+All commands require
+- the server url `-s` flag as well as​
+- the remote path `-r` flag​​
+
+Then only the four upload/download commands require
+- the local path `-l` flag too
+
+## Windows example
 - Build with `go build -o=client.exe`
 - Run with (be sure to replace the arguments - `SERVER`, `PORT`, `-l` and `-r`):
     ```
@@ -11,7 +21,7 @@
     ```
 
 
-# Linus example
+## Linux example
 - Build with `go build -o=client`
 - Add executable flag with `chmod +x client`
 - Run with (be sure to replace the arguments - `SERVER`, `PORT`, `-l` and `-r`):
