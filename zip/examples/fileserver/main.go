@@ -6,11 +6,48 @@ import (
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
 	"github.com/francoishill/golang-web-dry/errors/stacktraces/prettystacktrace"
 	"github.com/francoishill/golang-web-dry/zip/ziputils"
-	"log"
+	"github.com/ian-kent/go-log/appenders"
+	"github.com/ian-kent/go-log/layout"
+	"github.com/ian-kent/go-log/levels"
+	"github.com/ian-kent/go-log/log"
+	"github.com/ian-kent/go-log/logger"
 	"net/http"
 	"os"
 	"strings"
 )
+
+//
+//PULL REQUEST START -- https://github.com/ian-kent/go-log
+//
+type multipleAppender struct {
+	currentLayout   layout.Layout
+	listOfAppenders []appenders.Appender
+}
+
+func Multiple(layout layout.Layout, appenders ...appenders.Appender) appenders.Appender {
+	return &multipleAppender{
+		listOfAppenders: appenders,
+		currentLayout:   layout,
+	}
+}
+
+func (this *multipleAppender) Layout() layout.Layout {
+	return this.currentLayout
+}
+
+func (this *multipleAppender) SetLayout(l layout.Layout) {
+	this.currentLayout = l
+}
+
+func (this *multipleAppender) Write(level levels.LogLevel, message string, args ...interface{}) {
+	for _, appender := range this.listOfAppenders {
+		appender.Write(level, message, args...)
+	}
+}
+
+//
+//PULL REQUEST END -- https://github.com/ian-kent/go-log
+//
 
 type Logger interface {
 	Debug(msg string, args ...interface{})
@@ -18,18 +55,20 @@ type Logger interface {
 	Error(msg string, args ...interface{})
 }
 
-type defaultLogger struct{}
+type defaultLogger struct {
+	l logger.Logger
+}
 
 func (l *defaultLogger) Debug(msg string, args ...interface{}) {
-	log.Println("[D] " + fmt.Sprintf(msg, args...))
+	l.l.Debug(fmt.Sprintf(msg, args...))
 }
 
 func (l *defaultLogger) Info(msg string, args ...interface{}) {
-	log.Println("[I] " + fmt.Sprintf(msg, args...))
+	log.Info(fmt.Sprintf(msg, args...))
 }
 
 func (l *defaultLogger) Error(msg string, args ...interface{}) {
-	log.Println("[E] " + fmt.Sprintf(msg, args...))
+	log.Error(fmt.Sprintf(msg, args...))
 }
 
 type cliExtendedContext struct {
@@ -61,7 +100,22 @@ func (a *appContext) getPathFromRequest(r *http.Request) string {
 	err := r.ParseForm()
 	CheckError(err)
 
-	return r.FormValue("path")
+	path := r.FormValue("path")
+	if path == "" {
+		panic("Cannot find 'path' query parameter...")
+	}
+	return strings.TrimRight(path, ` /\`)
+}
+
+func (a *appContext) getRequiredQueryValue(r *http.Request, keyName string) string {
+	err := r.ParseForm()
+	CheckError(err)
+
+	val := r.FormValue(keyName)
+	if val == "" {
+		panic("Cannot find '" + keyName + "' query parameter...")
+	}
+	return val
 }
 
 func (a *appContext) getFileOrFolderFromRequest(r *http.Request) (path string, isDir bool) {
@@ -104,9 +158,9 @@ func (a *appContext) isDir(path string) bool {
 }
 
 func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "POST" {
-		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
+	defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
 
+	if r.Method == "POST" {
 		path, isDir := a.getFileOrFolderFromRequest(r)
 
 		if isDir {
@@ -117,8 +171,6 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 			ziputils.SaveReaderToFile(a.logger, r.Body, path)
 		}
 	} else if r.Method == "GET" {
-		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
-
 		path := a.getPathFromRequest(r)
 
 		if a.isDir(path) {
@@ -130,8 +182,6 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 			ziputils.UploadFileToHttpResponseWriter(a.logger, w, path)
 		}
 	} else if r.Method == "DELETE" {
-		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
-
 		path := a.getPathFromRequest(r)
 
 		if a.isDir(path) {
@@ -143,11 +193,63 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 			err := os.Remove(path)
 			CheckError(err)
 		}
-	} else {
-		defer a.recoveryFunc(w, r, "ERROR in handler: %+v")
+	} else if r.Method == "PUT" {
+		action := a.getRequiredQueryValue(r, "action")
+		switch strings.ToLower(action) {
+		case "move":
+			oldPath := a.getPathFromRequest(r)
+			newPath := a.getRequiredQueryValue(r, "newpath")
 
+			err := os.Rename(oldPath, newPath)
+			CheckError(err)
+			break
+		default:
+			panic("Unsupported action '" + action + "'")
+		}
+	} else if r.Method == "HEAD" {
+		path := a.getPathFromRequest(r)
+
+		a.logger.Info("Sending stats for path %s", path)
+
+		info, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			w.Header().Set("EXISTS", "0")
+			return
+		}
+		CheckError(err)
+
+		w.Header().Set("EXISTS", "1")
+
+		if info.IsDir() {
+			w.Header().Set("IS_DIR", "1")
+		} else {
+			w.Header().Set("IS_DIR", "0")
+		}
+	} else {
 		panic("Unsupported method " + r.Method)
 	}
+}
+
+func getLogger() logger.Logger {
+	logger := log.Logger()
+
+	layoutToUse := layout.Pattern("%d [%p] %m") //date, level/priority, message
+
+	rollingFileAppender := appenders.RollingFile("rolling-log.log", true)
+	rollingFileAppender.MaxBackupIndex = 5
+	rollingFileAppender.MaxFileSize = 20 * 1024 * 1024 // 20 MB
+	rollingFileAppender.SetLayout(layoutToUse)
+
+	consoleAppender := appenders.Console()
+	consoleAppender.SetLayout(layoutToUse)
+	logger.SetAppender(
+		Multiple( //appenders.Multiple( ONCE PULL REQUEST OF ABOVE IS IN
+			layoutToUse,
+			rollingFileAppender,
+			consoleAppender,
+		))
+
+	return logger
 }
 
 func MainAction(c *cli.Context) {
@@ -155,13 +257,16 @@ func MainAction(c *cli.Context) {
 
 	port := c2.RequireGlobalString("port")
 
-	logger := &defaultLogger{}
-	h := &appContext{logger}
+	l := getLogger()
+	defaultLogger := &defaultLogger{
+		l,
+	}
+	h := &appContext{defaultLogger}
 
 	http.HandleFunc("/", h.handler)
 
-	log.Println(fmt.Sprintf("Now serving FileServer on port %s (process id is %d)", port, os.Getpid()))
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	l.Info("Now serving FileServer on port %s (process id is %d)", port, os.Getpid())
+	l.Fatal(fmt.Sprintf("%s", http.ListenAndServe(":"+port, nil)))
 }
 
 func main() {

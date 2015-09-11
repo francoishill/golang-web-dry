@@ -154,6 +154,44 @@ func (a *appContext) delete(serverUrl, remotePath, dirFileFilterPattern string) 
 	checkServerResponse(resp)
 }
 
+func (a *appContext) writeStatsToStdout(serverUrl, remotePath string) {
+	defer (&timer{a.logger, time.Now()}).printDuration()
+
+	resp, err := http.Head(serverUrl + "?path=" + url.QueryEscape(remotePath))
+	CheckError(err)
+	defer resp.Body.Close()
+
+	checkServerResponse(resp)
+
+	if exists := resp.Header.Get("EXISTS"); exists == "" {
+		panic("Could not find 'EXISTS' header")
+	} else {
+		a.logger.Info("STATS_EXISTS=%s", exists)
+		if exists == "0" {
+			return
+		}
+	}
+
+	if isDir := resp.Header.Get("IS_DIR"); isDir == "" {
+		panic("Could not find 'IS_DIR' header")
+	} else {
+		a.logger.Info("STATS_IS_DIR=%s", isDir)
+	}
+}
+
+func (a *appContext) move(serverUrl, remotePath, newPath string) {
+	defer (&timer{a.logger, time.Now()}).printDuration()
+
+	escapedOldPath := url.QueryEscape(remotePath)
+	escapedNewPath := url.QueryEscape(newPath)
+	req, err := http.NewRequest("PUT", serverUrl+"?action=move&path="+escapedOldPath+"&newpath="+escapedNewPath, nil)
+	CheckError(err)
+
+	resp, err := http.DefaultClient.Do(req)
+	CheckError(err)
+	checkServerResponse(resp)
+}
+
 func (a *appContext) MainAction(c *cli.Context) {
 	c2 := &cliExtendedContext{c}
 
@@ -176,6 +214,13 @@ func (a *appContext) MainAction(c *cli.Context) {
 	case "DELETE":
 		dirFileFilterPattern := c.GlobalString("filefilter") //Not required
 		a.delete(serverUrl, remotePath, dirFileFilterPattern)
+		break
+	case "STATS":
+		a.writeStatsToStdout(serverUrl, remotePath)
+		break
+	case "MOVE":
+		newPath := c.GlobalString("newpath") //Not required
+		a.move(serverUrl, remotePath, newPath)
 		break
 	default:
 		panic("Unknown mode '" + mode + "'")
@@ -225,6 +270,11 @@ func main() {
 			Name:  "filefilter,ff",
 			Value: "",
 			Usage: "The golang filepath filter pattern (for file base name), see http://golang.org/pkg/path/filepath/#Match",
+		},
+		cli.StringFlag{
+			Name:  "newpath,np",
+			Value: "",
+			Usage: "The new path, this is only currently applicable to the 'MOVE' method.",
 		},
 	}
 	app.Run(os.Args)
