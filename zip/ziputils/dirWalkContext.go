@@ -46,6 +46,12 @@ func (d *dirWalkContext) DeleteDirectory(dir string) {
 	}
 }
 
+/*
+Creates a new instance of dirWalkContext.
+
+For example to only filter and find .txt files, use:
+	wc := NewDirWalkContext("*.txt")
+*/
 func NewDirWalkContext(fileFilterPattern string) *dirWalkContext {
 	return &dirWalkContext{
 		FileFilterPattern: fileFilterPattern,
