@@ -23,6 +23,7 @@ type RunningCommand struct {
 	CommandObj       *exec.Cmd
 	CurrentFeedback  []string
 	IsRunning        bool
+	RanSuccessfully  bool
 
 	ReadStdOutChannel chan string
 	ReadStdErrChannel chan string
@@ -113,6 +114,7 @@ func (r *RunningCommand) Start(timeoutDuration time.Duration) *RunningCommand {
 	}
 
 	r.IsRunning = false
+	r.RanSuccessfully = false
 	r.tmpStdOutDone = false
 	r.tmpStdErrDone = false
 
@@ -159,9 +161,9 @@ func (r *RunningCommand) Start(timeoutDuration time.Duration) *RunningCommand {
 		r.AppendLine("Command has started.\n", false)
 
 		err := cmd.Wait()
-		if err != nil {
-			CheckError(err)
-		}
+		CheckError(err)
+
+		r.RanSuccessfully = true
 
 		if r.QuitChannel != nil {
 			r.QuitChannel <- true
