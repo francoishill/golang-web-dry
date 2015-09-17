@@ -6,7 +6,6 @@ import (
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -119,10 +118,7 @@ func (r *RunningCommand) Start(timeoutDuration time.Duration) *RunningCommand {
 
 	cmd := exec.Command(r.CommandExePath, r.CommandArguments...)
 
-	if r.WorkingDirectory == "" {
-		workingDir := filepath.Dir(r.CommandExePath)
-		cmd.Dir = workingDir
-	} else {
+	if r.WorkingDirectory != "" {
 		cmd.Dir = r.WorkingDirectory
 	}
 
