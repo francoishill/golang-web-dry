@@ -16,8 +16,9 @@ import (
 var IndentJSON = false
 
 type RecoveredErrorDetails struct {
-	Error      string
-	StackTrace string
+	OriginalError interface{}
+	Error         string
+	StackTrace    string
 }
 
 type Recovery struct {
@@ -48,7 +49,7 @@ func (rec *Recovery) ServeHTTP(rw http.ResponseWriter, r *http.Request, next htt
 			}
 			stack := GetPrettyStackTrace()
 			if rec.WithRecoveredError != nil {
-				rec.WithRecoveredError(&RecoveredErrorDetails{errMsg, stack})
+				rec.WithRecoveredError(&RecoveredErrorDetails{err, errMsg, stack})
 			}
 
 			rend := render.New(render.Options{
