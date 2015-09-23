@@ -21,8 +21,13 @@ type RecoveredErrorDetails struct {
 	StackTrace    string
 }
 
+type RecoveryResponse struct {
+	StatusCode         int
+	JsonResponseObject interface{}
+}
+
 type Recovery struct {
-	WithRecoveredError func(errDetails *RecoveredErrorDetails)
+	WithRecoveredError func(errDetails *RecoveredErrorDetails) *RecoveryResponse
 }
 type jsonPanicError struct {
 	Code  int    `json:",omitempty"` // the http response code
@@ -31,7 +36,7 @@ type jsonPanicError struct {
 	// From  string `json:",omitempty"` // the file and line number from which the error originated
 }
 
-func NewRecovery(withRecoveredError func(errDetails *RecoveredErrorDetails)) *Recovery {
+func NewRecovery(withRecoveredError func(errDetails *RecoveredErrorDetails) *RecoveryResponse) *Recovery {
 	return &Recovery{
 		WithRecoveredError: withRecoveredError,
 	}
@@ -48,14 +53,29 @@ func (rec *Recovery) ServeHTTP(rw http.ResponseWriter, r *http.Request, next htt
 				errMsg = fmt.Sprint(err)
 			}
 			stack := GetPrettyStackTrace()
+
+			var statusCode int = 0
+			var jsonResponseObject interface{}
+
 			if rec.WithRecoveredError != nil {
-				rec.WithRecoveredError(&RecoveredErrorDetails{err, errMsg, stack})
+				recoveryResponse := rec.WithRecoveredError(&RecoveredErrorDetails{err, errMsg, stack})
+				if recoveryResponse != nil {
+					statusCode = recoveryResponse.StatusCode
+					jsonResponseObject = recoveryResponse.JsonResponseObject
+				}
+			}
+
+			if statusCode == 0 {
+				statusCode = http.StatusInternalServerError
+			}
+			if jsonResponseObject == nil {
+				jsonResponseObject = &jsonPanicError{statusCode, "InternalError", errMsg}
 			}
 
 			rend := render.New(render.Options{
 				IndentJSON: IndentJSON,
 			})
-			rend.JSON(rw, 500, &jsonPanicError{500, "InternalError", errMsg})
+			rend.JSON(rw, statusCode, jsonResponseObject)
 		}
 	}()
 
