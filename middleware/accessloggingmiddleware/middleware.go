@@ -5,39 +5,50 @@ package accessloggingmiddleware
 //  - Beego's context/input: https://github.com/astaxie/beego/blob/8f7246e17b504c858592a28a87e96fa7537a5aaf/context/input.go
 
 import (
+	"github.com/codegangsta/negroni"
 	"net/http"
+	"time"
 
 	"github.com/francoishill/golang-web-dry/requests/requestproxyutils"
 )
 
-type AccessInfo struct {
-	HttpMethod string
-	RemoteAddr string
-	RemoteIP   string
-	RequestURI string
-	Proxies    []string
-	UserAgent  string
-}
-
 type middleware struct {
-	withAccessInfo func(info *AccessInfo)
+	handler AccessInfoHandler
 }
 
 func (m *middleware) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	if m.withAccessInfo != nil {
-		m.withAccessInfo(&AccessInfo{
-			HttpMethod: r.Method,
-			RemoteAddr: r.RemoteAddr,
-			RemoteIP:   requestproxyutils.IP(r),
-			RequestURI: r.RequestURI,
-			Proxies:    requestproxyutils.Proxy(r),
-			UserAgent:  r.UserAgent(),
-		})
+	accessInfo := &AccessInfo{
+		HttpMethod: r.Method,
+		RemoteAddr: r.RemoteAddr,
+		RemoteIP:   requestproxyutils.IP(r),
+		RequestURI: r.RequestURI,
+		Proxies:    requestproxyutils.Proxy(r),
+		UserAgent:  r.UserAgent(),
+	}
+
+	if m.handler != nil {
+		startTime := time.Now()
+		m.handler.OnStart(&StartAccessInfo{accessInfo, startTime})
+
+		defer func() {
+			r := recover()
+
+			endTime := time.Now()
+			duration := endTime.Sub(startTime)
+
+			res := w.(negroni.ResponseWriter)
+
+			m.handler.OnEnd(&EndAccessInfo{accessInfo, r != nil, res.Status(), http.StatusText(res.Status()), endTime, duration})
+
+			if r != nil {
+				panic(r)
+			}
+		}()
 	}
 
 	next(w, r)
 }
 
-func NewAccessLoggingMiddleware(withAccessInfo func(info *AccessInfo)) *middleware {
-	return &middleware{withAccessInfo}
+func NewAccessLoggingMiddleware(handler AccessInfoHandler) *middleware {
+	return &middleware{handler}
 }
