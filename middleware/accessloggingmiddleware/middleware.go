@@ -11,6 +11,7 @@ import (
 )
 
 type AccessInfo struct {
+	HttpMethod string
 	RemoteAddr string
 	RemoteIP   string
 	RequestURI string
@@ -25,6 +26,7 @@ type middleware struct {
 func (m *middleware) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	if m.withAccessInfo != nil {
 		m.withAccessInfo(&AccessInfo{
+			HttpMethod: r.Method,
 			RemoteAddr: r.RemoteAddr,
 			RemoteIP:   requestproxyutils.IP(r),
 			RequestURI: r.RequestURI,
