@@ -105,7 +105,7 @@ func (a *appContext) uploadFile(serverUrl, localPath, remotePath string) {
 	CheckError(err)
 
 	a.logger.Debug("Now starting to upload local file '%s' of size %s to remote path '%s'", localPath, humanize.IBytes(uint64(a.getFileSize(file))), remotePath)
-	resp, err := http.Post(serverUrl+"?file="+url.QueryEscape(remotePath), "application/octet-stream", file)
+	resp, err := http.Post(serverUrl+"?path="+url.QueryEscape(remotePath), "application/octet-stream", file)
 	CheckError(err)
 
 	checkServerResponse(resp)
