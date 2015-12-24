@@ -20,6 +20,7 @@ type routerBuilder struct {
 
 func (r *routerBuilder) SetController(controller Controller) RouterBuilder {
 	r.controller = controller
+	r.urlParts = controller.RelativeURLPatterns()
 	return r
 }
 
@@ -46,9 +47,9 @@ func (r *routerBuilder) Build() *Router {
 	}
 }
 
-func NewRouterBuilder(urlParts ...string) RouterBuilder {
+func NewRouterBuilder() RouterBuilder {
 	return &routerBuilder{
-		urlParts,
+		[]string{},
 		[]http.HandlerFunc{},
 		nil,
 		[]*Router{},

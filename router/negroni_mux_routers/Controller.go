@@ -5,7 +5,9 @@ import (
 	"net/http"
 )
 
-type Controller interface{}
+type Controller interface {
+	RelativeURLPatterns() []string
+}
 
 type optionsHandler interface {
 	Options(w http.ResponseWriter, r *http.Request)
