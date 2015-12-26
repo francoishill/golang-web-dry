@@ -24,6 +24,9 @@ type postHandler interface {
 type putHandler interface {
 	Put(w http.ResponseWriter, r *http.Request)
 }
+type patchHandler interface {
+	Patch(w http.ResponseWriter, r *http.Request)
+}
 type deleteHandler interface {
 	Delete(w http.ResponseWriter, r *http.Request)
 }
@@ -56,6 +59,11 @@ func GetControllerMethods(controller Controller, panicOnZeroMethods bool) map[st
 	if h, ok := controller.(putHandler); ok {
 		cnt++
 		m["PUT"] = h.Put
+	}
+
+	if h, ok := controller.(patchHandler); ok {
+		cnt++
+		m["PATCH"] = h.Patch
 	}
 
 	if h, ok := controller.(deleteHandler); ok {
