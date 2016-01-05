@@ -23,6 +23,11 @@ func setupRouters(router *mux.Router, parentMiddleWare []http.HandlerFunc, route
 			}
 		}
 
+		if len(rd.urlParts) == 0 {
+			setupRouters(router, combinedMiddleWareHandlers, rd.subRouters)
+			continue
+		}
+
 		for _, urlPart := range rd.urlParts {
 			var subRouterToUse *mux.Router
 			if urlPart != "" {

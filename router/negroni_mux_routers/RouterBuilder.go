@@ -6,6 +6,7 @@ import (
 
 type RouterBuilder interface {
 	SetController(controller Controller) RouterBuilder
+	AddUrlParts(urlParts ...string) RouterBuilder
 	AddMiddlewares(middlewares ...http.HandlerFunc) RouterBuilder
 	AddSubrouters(subRouters ...*Router) RouterBuilder
 	Build() *Router
@@ -21,6 +22,11 @@ type routerBuilder struct {
 func (r *routerBuilder) SetController(controller Controller) RouterBuilder {
 	r.controller = controller
 	r.urlParts = controller.RelativeURLPatterns()
+	return r
+}
+
+func (r *routerBuilder) AddUrlParts(urlParts ...string) RouterBuilder {
+	r.urlParts = append(r.urlParts, urlParts...)
 	return r
 }
 
