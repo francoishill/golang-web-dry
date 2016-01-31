@@ -31,8 +31,8 @@ type deleteHandler interface {
 	Delete(w http.ResponseWriter, r *http.Request)
 }
 
-func GetControllerMethods(controller Controller, panicOnZeroMethods bool) map[string]ControllerMethod {
-	m := make(map[string]ControllerMethod)
+func GetControllerMethods(controller Controller, panicOnZeroMethods bool) map[string]http.HandlerFunc {
+	m := make(map[string]http.HandlerFunc)
 
 	cnt := 0
 
