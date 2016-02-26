@@ -238,6 +238,7 @@ func main() {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Error("%+v", r)
+			os.Exit(2)
 		}
 	}()
 

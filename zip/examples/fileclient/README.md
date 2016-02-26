@@ -1,7 +1,7 @@
 # Example using ziputils as a file client (communicating with the example server)
 
 ## Commands
-Commands are currently `UPLOADFOLDER`, `UPLOADFILE`, `DOWNLOADFILE`, `DOWNLOADFOLDER`, `DELETEFILE`, `DELETEFOLDER`.
+Commands are currently `UPLOAD`, `DOWNLOAD`, `DELETE`, `STATS`, `MOVE`.
 
 All commands require
 - the server url `-s` flag as well as​
