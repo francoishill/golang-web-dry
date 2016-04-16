@@ -2,14 +2,15 @@ package ziputils
 
 import (
 	"archive/tar"
-	. "github.com/francoishill/golang-web-dry/errors/checkerror"
-	"github.com/francoishill/golang-web-dry/osutils"
 	"io"
 	"net/http"
 	"sync"
+
+	. "github.com/francoishill/golang-web-dry/errors/checkerror"
+	"github.com/francoishill/golang-web-dry/osutils"
 )
 
-func UploadDirectoryToUrl(logger SimpleLogger, url, bodyType, directoryPath string, walkContext *dirWalkContext, checkResponse func(resp *http.Response)) {
+func UploadDirectoryToUrl(logger SimpleLogger, url, bodyType, directoryPath string, walkContext *dirWalkContext, checkResponse func(resp *http.Response) error) {
 	if !osutils.DirectoryExists(directoryPath) {
 		panic("Directory does not exist: " + directoryPath)
 	}
@@ -33,7 +34,8 @@ func UploadDirectoryToUrl(logger SimpleLogger, url, bodyType, directoryPath stri
 	resp.Body.Close()
 
 	if checkResponse != nil {
-		checkResponse(resp)
+		err := checkResponse(resp)
+		CheckError(err)
 	}
 
 	wg.Wait()
