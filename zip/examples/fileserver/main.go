@@ -2,6 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"os"
+	"strings"
+
 	"github.com/codegangsta/cli"
 	. "github.com/francoishill/golang-web-dry/errors/checkerror"
 	"github.com/francoishill/golang-web-dry/errors/stacktraces/prettystacktrace"
@@ -11,9 +15,6 @@ import (
 	"github.com/ian-kent/go-log/levels"
 	"github.com/ian-kent/go-log/log"
 	"github.com/ian-kent/go-log/logger"
-	"net/http"
-	"os"
-	"strings"
 )
 
 //
@@ -168,7 +169,7 @@ func (a *appContext) handler(w http.ResponseWriter, r *http.Request) {
 			ziputils.SaveTarReaderToPath(a.logger, r.Body, path)
 		} else {
 			a.logger.Info("Receiving file to %s", path)
-			ziputils.SaveReaderToFile(a.logger, r.Body, path)
+			ziputils.SaveTarReaderToPath(a.logger, r.Body, path)
 		}
 	} else if r.Method == "GET" {
 		path := a.getPathFromRequest(r)

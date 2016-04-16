@@ -131,12 +131,9 @@ func (c *client) uploadFile(serverUrl, localPath, remotePath string) (returnErr 
 	}
 
 	c.simpleLogger.Debug("Now starting to upload local file '%s' of size %s to remote path '%s'", localPath, humanize.IBytes(uint64(fileSize)), remotePath)
-	resp, err := http.Post(serverUrl+"?path="+url.QueryEscape(remotePath), "application/octet-stream", file)
-	if err != nil {
-		return fmt.Errorf("Failed to upload file '%s' to '%s', error: %s", localPath, remotePath, err.Error())
-	}
-
-	return c.checkServerResponse(resp)
+	url := serverUrl + "?path=" + url.QueryEscape(remotePath)
+	ziputils.UploadFileToUrl(c.simpleLogger, url, "application/octet-stream", localPath, c.checkServerResponse)
+	return nil
 }
 
 func (c *client) uploadDirectory(serverUrl, localPath, remotePath, dirFileFilterPattern string) (returnErr error) {

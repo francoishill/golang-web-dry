@@ -2,10 +2,11 @@ package ziputils
 
 import (
 	"archive/tar"
-	. "github.com/francoishill/golang-web-dry/errors/checkerror"
 	"io"
 	"os"
 	"path/filepath"
+
+	. "github.com/francoishill/golang-web-dry/errors/checkerror"
 )
 
 func SaveTarReaderToPath(logger SimpleLogger, bodyReader io.Reader, savePath string) {
@@ -38,13 +39,17 @@ func SaveTarReaderToPath(logger SimpleLogger, bodyReader io.Reader, savePath str
 				fullDestinationFilePath = savePath
 			}
 
-			os.MkdirAll(filepath.Dir(fullDestinationFilePath), os.FileMode(hdr.Mode))
+			err = os.MkdirAll(filepath.Dir(fullDestinationFilePath), os.FileMode(hdr.Mode))
+			CheckError(err)
 
 			logger.Debug("(TAR) Saving file %s", fullDestinationFilePath)
 			file, err := os.OpenFile(fullDestinationFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(hdr.Mode))
 			CheckError(err)
-			defer file.Close()
-			defer os.Chtimes(fullDestinationFilePath, hdr.AccessTime, hdr.ModTime)
+
+			defer func() {
+				file.Close()
+				os.Chtimes(fullDestinationFilePath, hdr.AccessTime, hdr.ModTime)
+			}()
 
 			_, err = io.Copy(file, tarReader)
 			CheckError(err)
