@@ -13,6 +13,10 @@ import (
 	"github.com/francoishill/golang-web-dry/zip/examples/fileclient"
 )
 
+const (
+	AppVersion = "0.0.2"
+)
+
 type Logger interface {
 	Debug(msg string, args ...interface{})
 	Info(msg string, args ...interface{})
@@ -127,6 +131,8 @@ func main() {
 	}
 	context := &appContext{logger}
 
+	logger.i.Println("VERSION " + AppVersion)
+
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Error("%+v", r)
@@ -170,5 +176,6 @@ func main() {
 			Usage: "The new path, this is only currently applicable to the 'MOVE' method.",
 		},
 	}
+	app.Version = AppVersion
 	app.Run(os.Args)
 }
