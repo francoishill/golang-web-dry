@@ -17,6 +17,10 @@ import (
 	"github.com/ian-kent/go-log/logger"
 )
 
+var (
+	DISPLAY_VERSION = "0.0.1"
+)
+
 //
 //PULL REQUEST START -- https://github.com/ian-kent/go-log
 //
@@ -275,6 +279,7 @@ func main() {
 	app.Name = "copyserver"
 	app.Usage = "A http server to allow clients to upload and download files"
 	app.Action = MainAction
+	app.Version = DISPLAY_VERSION
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "port,p",

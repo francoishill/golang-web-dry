@@ -148,7 +148,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "mode,m",
 			Value: "",
-			Usage: "The mode of the action (UPLOADFILE, DOWNLOADFILE, UPLOADFOLDER, DOWNLOADFOLDER)",
+			Usage: "The mode of the action (UPLOAD, DOWNLOAD, DELETE, STATS)",
 		},
 		cli.StringFlag{
 			Name:  "serverurl,s",
